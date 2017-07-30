@@ -41,6 +41,7 @@
 extern crate libc;
 extern crate termios;
 
+use std::env;
 use termios::*;
 
 /*
@@ -152,6 +153,8 @@ const RDESC: [u8; 85] = [
 ];
 
 fn main() {
+    let mut path: String = "/dev/uhid".to_string();
+
     match Termios::from_fd(libc::STDIN_FILENO) {
         Err(_) => eprintln!("Cannot get tty state"),
         Ok(mut state) => {
@@ -161,6 +164,16 @@ fn main() {
                 Err(_) => eprintln!("Cannot set tty state"),
                 Ok(_) => ()
             }
+        }
+    }
+
+    let args: Vec<_> = env::args().collect();
+    if args.len() >= 2 {
+        if args[1] == "-h" || args[1] == "--help" {
+            eprintln!("Usage: {} [{}]", args[0], path);
+            return;
+        } else {
+            path = args[1].clone();
         }
     }
 
