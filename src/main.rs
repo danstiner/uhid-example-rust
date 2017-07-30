@@ -38,6 +38,11 @@
  * use the installed uhid.h if available.
  */
 
+extern crate libc;
+extern crate termios;
+
+use termios::*;
+
 /*
  * HID Report Desciptor
  * We emulate a basic 3 button mouse with wheel and 3 keyboard LEDs. This is
@@ -147,5 +152,17 @@ const RDESC: [u8; 85] = [
 ];
 
 fn main() {
+    match Termios::from_fd(libc::STDIN_FILENO) {
+        Err(_) => eprintln!("Cannot get tty state"),
+        Ok(mut state) => {
+            state.c_lflag &= !ICANON;
+            state.c_cc[VMIN] = 1;
+            match tcsetattr(libc::STDIN_FILENO, TCSANOW, &state) {
+                Err(_) => eprintln!("Cannot set tty state"),
+                Ok(_) => ()
+            }
+        }
+    }
+
     println!("Hello, world!");
 }
