@@ -1,0 +1,6 @@
+[package]
+name = "uhid-example"
+version = "0.1.0"
+authors = ["Daniel Stiner <daniel.stiner@gmail.com>"]
+
+[dependencies]
