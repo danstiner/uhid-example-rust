@@ -152,9 +152,9 @@ const RDESC: [u8; 85] = [
     0xc0,		/* END_COLLECTION */
 ];
 
-fn main() {
-    let mut path: String = "/dev/uhid".to_string();
+const DEFAULT_PATH: &str = "/dev/uhid";
 
+fn main() {
     match Termios::from_fd(libc::STDIN_FILENO) {
         Err(_) => eprintln!("Cannot get tty state"),
         Ok(mut state) => {
@@ -167,15 +167,17 @@ fn main() {
         }
     }
 
-    let args: Vec<_> = env::args().collect();
-    if args.len() >= 2 {
-        if args[1] == "-h" || args[1] == "--help" {
-            eprintln!("Usage: {} [{}]", args[0], path);
-            return;
-        } else {
-            path = args[1].clone();
+    let path = match env::args().nth(1) {
+        Some(arg) => {
+            if arg == "-h" || arg == "--help" {
+                eprintln!("Usage: {} [{}]", env::args().nth(0).unwrap(), DEFAULT_PATH);
+                return;
+            } else {
+                arg.clone()
+            }
         }
-    }
+        None => DEFAULT_PATH.to_string()
+    };
 
     println!("Hello, world!");
 }
