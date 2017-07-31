@@ -48,10 +48,12 @@ use mio::unix::EventedFd;
 use nix::fcntl;
 use nix::unistd;
 use std::env;
+use std::ffi::CString;
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::mem;
+use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 use std::process;
 use std::slice;
@@ -189,6 +191,27 @@ fn uhid_write(file: &mut File, uhid_event: &uhid_event) -> io::Result<()> {
     }
 }
 
+fn create(file: &mut File) -> io::Result<()> {
+    let mut rdesc = RDESC;
+    let mut ev: uhid_event = unsafe { mem::zeroed() };
+
+    ev.type_ = uhid_legacy_event_type::UHID_CREATE as u32;
+
+    unsafe {
+        let create = ev.u.create.as_mut();
+        create.name.copy_from_slice(CString::new("test-uhid-device").unwrap().as_bytes_with_nul());
+        create.rd_data = &mut rdesc[0] as *mut u8;
+        create.rd_size = rdesc.len() as u16;
+        create.bus = BUS_USB as u16;
+        create.vendor = 0x15d9;
+        create.product = 0x0a37;
+        create.version = 0;
+        create.country = 0;
+    }
+
+    uhid_write(file, &ev)
+}
+
 fn main() {
     match Termios::from_fd(libc::STDIN_FILENO) {
         Err(_) => eprintln!("Cannot get tty state"),
@@ -216,13 +239,10 @@ fn main() {
 
     eprintln!("Open uhid-cdev {}", path.to_str().unwrap());
     let fd = fcntl::open(&path, fcntl::O_RDWR | fcntl::O_CLOEXEC, nix::sys::stat::S_IRUSR | nix::sys::stat::S_IWUSR | nix::sys::stat::S_IRGRP | nix::sys::stat::S_IWGRP).map_err(|err| format!("Cannot open uhid-cdev {}: {}", path.to_str().unwrap(), err)).unwrap();
+    let mut file = unsafe { File::from_raw_fd(fd) };
 
     eprintln!("Create uhid device");
-    // ret = create(fd);
-    // if (ret) {
-    //     unistd::close(fd);
-    //     process::exit(libc::EXIT_FAILURE);
-    // }
+    create(&mut file).unwrap();
 
     const STDIN: Token = Token(0);
     const UHID_DEVICE: Token = Token(1);
