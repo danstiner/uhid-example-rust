@@ -195,7 +195,7 @@ fn create(file: &mut File) -> io::Result<()> {
     let mut rdesc = RDESC;
     let mut ev: uhid_event = unsafe { mem::zeroed() };
 
-    ev.type_ = uhid_legacy_event_type::UHID_CREATE as u32;
+    ev.type_ = uhid_event_type::__UHID_LEGACY_CREATE as u32;
 
     unsafe {
         let create = ev.u.create.as_mut();
@@ -208,6 +208,15 @@ fn create(file: &mut File) -> io::Result<()> {
         create.version = 0;
         create.country = 0;
     }
+
+    uhid_write(file, &ev)
+}
+
+fn destroy(file: &mut File) -> io::Result<()>
+{
+    let mut ev: uhid_event = unsafe { mem::zeroed() };
+
+    ev.type_ = uhid_event_type::UHID_DESTROY as u32;
 
     uhid_write(file, &ev)
 }
@@ -275,5 +284,5 @@ fn main() {
     }
 
     println!("Destroy uhid device");
-    // destroy()
+    destroy(&mut file);
 }
