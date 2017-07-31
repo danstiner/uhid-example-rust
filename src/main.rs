@@ -51,7 +51,7 @@ use std::env;
 use std::ffi::CString;
 use std::fs::File;
 use std::io;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::mem;
 use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
@@ -171,6 +171,41 @@ const RDESC: [u8; 85] = [
 
 const DEFAULT_PATH: &str = "/dev/uhid";
 
+#[derive(Clone, Copy)]
+struct DeviceState {
+    btn1_down: bool,
+    btn2_down: bool,
+    btn3_down: bool,
+    abs_hor: i8,
+    abs_ver: i8,
+    wheel: i8,
+}
+
+impl Default for DeviceState {
+    fn default() -> DeviceState {
+        DeviceState {
+            btn1_down: false,
+            btn2_down: false,
+            btn3_down: false,
+            abs_hor: 0,
+            abs_ver: 0,
+            wheel: 0,
+        }
+    }
+}
+
+impl DeviceState {
+    fn toggle_btn1(&mut self) {
+        self.btn1_down = !self.btn1_down;
+    }
+    fn toggle_btn2(&mut self) {
+        self.btn2_down = !self.btn2_down;
+    }
+    fn toggle_btn3(&mut self) {
+        self.btn3_down = !self.btn3_down;
+    }
+}
+
 fn uhid_write(file: &mut File, uhid_event: &uhid_event) -> io::Result<()> {
     let uhid_event_slice: &[u8];
     let uhid_event_size = mem::size_of::<uhid_event>();
@@ -199,7 +234,8 @@ fn create(file: &mut File) -> io::Result<()> {
 
     unsafe {
         let create = ev.u.create.as_mut();
-        create.name.copy_from_slice(CString::new("test-uhid-device").unwrap().as_bytes_with_nul());
+        create.name.copy_from_slice(
+            &[CString::new("test-uhid-device").unwrap().as_bytes_with_nul(), &[0u8; 111]].concat());
         create.rd_data = &mut rdesc[0] as *mut u8;
         create.rd_size = rdesc.len() as u16;
         create.bus = BUS_USB as u16;
@@ -221,7 +257,92 @@ fn destroy(file: &mut File) -> io::Result<()>
     uhid_write(file, &ev)
 }
 
+fn send_event(file: &mut File, state: &DeviceState) -> io::Result<()> {
+    let mut ev: uhid_event = unsafe { mem::zeroed() };
+
+    ev.type_ = uhid_event_type::__UHID_LEGACY_INPUT as u32;
+
+    unsafe {
+        let input = ev.u.input.as_mut();
+        input.size = 5;
+        input.data[0] = 0x1;
+        if state.btn1_down {
+            input.data[1] |= 0x1;
+        }
+        if state.btn1_down {
+            input.data[1] |= 0x2;
+        }
+        if state.btn1_down {
+            input.data[1] |= 0x4;
+        }
+        input.data[2] = state.abs_hor as u8;
+        input.data[3] = state.abs_ver as u8;
+        input.data[4] = state.wheel as u8;
+    }
+
+    uhid_write(file, &ev)
+}
+
+fn keyboard(file: &mut File, state: &mut DeviceState) -> io::Result<()>
+{
+    let mut character: [u8; 1] = Default::default();
+    io::stdin().read(&mut character)?;
+
+    match character[0] {
+        b'1' => {
+            state.toggle_btn1();
+            send_event(file, &state);
+        },
+        b'2' => {
+            state.toggle_btn2();
+            send_event(file, &state);
+        },
+        b'3' => {
+            state.toggle_btn3();
+            send_event(file, &state);
+        },
+        b'a' => {
+            state.abs_hor = -20;
+            send_event(file, &state);
+            state.abs_hor = 0;
+        },
+        b'd' => {
+            state.abs_hor = 20;
+            send_event(file, &state);
+            state.abs_hor = 0;
+        },
+        b'w' => {
+            state.abs_ver = -20;
+            send_event(file, &state);
+            state.abs_ver = 0;
+        },
+        b's' => {
+            state.abs_ver = 20;
+            send_event(file, &state);
+            state.abs_ver = 0;
+        },
+        b'r' => {
+            state.wheel = 1;
+            send_event(file, &state);
+            state.wheel = 0;
+        },
+        b'f' => {
+            state.wheel = -1;
+            send_event(file, &state);
+            state.wheel = 0;
+        },
+        b'q' => {
+            return Err(io::Error::new(io::ErrorKind::Other, "Cancelled"));
+        },
+        c => eprintln!("Invalid input: {}", c as char)
+    };
+
+    Ok(())
+}
+
 fn main() {
+    let mut device_state = Default::default();
+
     match Termios::from_fd(libc::STDIN_FILENO) {
         Err(_) => eprintln!("Cannot get tty state"),
         Ok(mut state) => {
@@ -272,8 +393,7 @@ fn main() {
         for event in events.iter() {
             match event.token() {
                 STDIN => {
-                    println!("keypress");
-                    // keyboard()
+                    keyboard(&mut file, &mut device_state);
                 }
                 UHID_DEVICE => {
                     // event()
