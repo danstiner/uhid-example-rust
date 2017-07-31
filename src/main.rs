@@ -48,9 +48,16 @@ use mio::unix::EventedFd;
 use nix::fcntl;
 use nix::unistd;
 use std::env;
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use std::mem;
 use std::path::PathBuf;
 use std::process;
+use std::slice;
 use termios::*;
+
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 /*
  * HID Report Desciptor
@@ -161,6 +168,26 @@ const RDESC: [u8; 85] = [
 ];
 
 const DEFAULT_PATH: &str = "/dev/uhid";
+
+fn uhid_write(file: &mut File, uhid_event: &uhid_event) -> io::Result<()> {
+    let uhid_event_slice: &[u8];
+    let uhid_event_size = mem::size_of::<uhid_event>();
+    unsafe {
+        uhid_event_slice = slice::from_raw_parts(
+            uhid_event as *const _ as *const u8,
+            uhid_event_size
+        );
+    }
+    match file.write(uhid_event_slice) {
+        Ok(bytes_written) =>
+            if bytes_written != uhid_event_size {
+                Err(io::Error::new(io::ErrorKind::Interrupted, format!("Wrong size written to uhid: {} != {}", bytes_written, uhid_event_size)))
+            } else {
+                Ok(())
+            },
+        Err(err) => Err(io::Error::new(err.kind(), format!("Cannot write to uhid: {}", err)))
+    }
+}
 
 fn main() {
     match Termios::from_fd(libc::STDIN_FILENO) {
