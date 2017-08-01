@@ -1,8 +1,9 @@
 [package]
+authors = ["Daniel Stiner <daniel.stiner@gmail.com>"]
 name = "uhid-example"
 version = "0.1.0"
-authors = ["Daniel Stiner <daniel.stiner@gmail.com>"]
-
 [dependencies]
 libc = "0.2.28"
+mio = "0.6.9"
+nix = "0.9.0"
 termios = "0.2.2"
