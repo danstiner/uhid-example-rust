@@ -176,9 +176,6 @@ struct DeviceState {
     btn1_down: bool,
     btn2_down: bool,
     btn3_down: bool,
-    abs_hor: i8,
-    abs_ver: i8,
-    wheel: i8,
 }
 
 impl Default for DeviceState {
@@ -187,9 +184,6 @@ impl Default for DeviceState {
             btn1_down: false,
             btn2_down: false,
             btn3_down: false,
-            abs_hor: 0,
-            abs_ver: 0,
-            wheel: 0,
         }
     }
 }
@@ -203,6 +197,30 @@ impl DeviceState {
     }
     fn toggle_btn3(&mut self) {
         self.btn3_down = !self.btn3_down;
+    }
+}
+
+
+#[derive(Clone, Copy)]
+struct InputEvent {
+    btn1_down: bool,
+    btn2_down: bool,
+    btn3_down: bool,
+    abs_hor: i8,
+    abs_ver: i8,
+    wheel: i8,
+}
+
+impl InputEvent {
+    fn from_state(state: &DeviceState) -> InputEvent {
+        InputEvent {
+            btn1_down: state.btn1_down,
+            btn2_down: state.btn2_down,
+            btn3_down: state.btn2_down,
+            abs_hor: 0,
+            abs_ver: 0,
+            wheel: 0,
+        }
     }
 }
 
@@ -257,27 +275,27 @@ fn destroy(file: &mut File) -> io::Result<()>
     uhid_write(file, &ev)
 }
 
-fn send_event(file: &mut File, state: &DeviceState) -> io::Result<()> {
+fn send_event(file: &mut File, input: &InputEvent) -> io::Result<()> {
     let mut ev: uhid_event = unsafe { mem::zeroed() };
 
     ev.type_ = uhid_event_type::__UHID_LEGACY_INPUT as u32;
 
     unsafe {
-        let input = ev.u.input.as_mut();
-        input.size = 5;
-        input.data[0] = 0x1;
-        if state.btn1_down {
-            input.data[1] |= 0x1;
+        let uhid_input = ev.u.input.as_mut();
+        uhid_input.size = 5;
+        uhid_input.data[0] = 0x1;
+        if input.btn1_down {
+            uhid_input.data[1] |= 0x1;
         }
-        if state.btn1_down {
-            input.data[1] |= 0x2;
+        if input.btn1_down {
+            uhid_input.data[1] |= 0x2;
         }
-        if state.btn1_down {
-            input.data[1] |= 0x4;
+        if input.btn1_down {
+            uhid_input.data[1] |= 0x4;
         }
-        input.data[2] = state.abs_hor as u8;
-        input.data[3] = state.abs_ver as u8;
-        input.data[4] = state.wheel as u8;
+        uhid_input.data[2] = input.abs_hor as u8;
+        uhid_input.data[3] = input.abs_ver as u8;
+        uhid_input.data[4] = input.wheel as u8;
     }
 
     uhid_write(file, &ev)
@@ -288,54 +306,59 @@ fn keyboard(file: &mut File, state: &mut DeviceState) -> io::Result<()>
     let mut character: [u8; 1] = Default::default();
     io::stdin().read(&mut character)?;
 
-    match character[0] {
+    let input_event = match character[0] {
         b'1' => {
             state.toggle_btn1();
-            send_event(file, &state);
+            InputEvent::from_state(state)
         },
         b'2' => {
             state.toggle_btn2();
-            send_event(file, &state);
+            InputEvent::from_state(state)
         },
         b'3' => {
             state.toggle_btn3();
-            send_event(file, &state);
+            InputEvent::from_state(state)
         },
         b'a' => {
-            state.abs_hor = -20;
-            send_event(file, &state);
-            state.abs_hor = 0;
+            let mut input = InputEvent::from_state(state);
+            input.abs_hor = -20;
+            input
         },
         b'd' => {
-            state.abs_hor = 20;
-            send_event(file, &state);
-            state.abs_hor = 0;
+            let mut input = InputEvent::from_state(state);
+            input.abs_hor = 20;
+            input
         },
         b'w' => {
-            state.abs_ver = -20;
-            send_event(file, &state);
-            state.abs_ver = 0;
+            let mut input = InputEvent::from_state(state);
+            input.abs_ver = -20;
+            input
         },
         b's' => {
-            state.abs_ver = 20;
-            send_event(file, &state);
-            state.abs_ver = 0;
+            let mut input = InputEvent::from_state(state);
+            input.abs_ver = 20;
+            input
         },
         b'r' => {
-            state.wheel = 1;
-            send_event(file, &state);
-            state.wheel = 0;
+            let mut input = InputEvent::from_state(state);
+            input.wheel = 1;
+            input
         },
         b'f' => {
-            state.wheel = -1;
-            send_event(file, &state);
-            state.wheel = 0;
+            let mut input = InputEvent::from_state(state);
+            input.wheel = -1;
+            input
         },
         b'q' => {
             return Err(io::Error::new(io::ErrorKind::Other, "Cancelled"));
         },
-        c => eprintln!("Invalid input: {}", c as char)
+        c => {
+            eprintln!("Invalid input: {}", c as char);
+            return Ok(())
+        }
     };
+
+    send_event(file, &input_event)?;
 
     Ok(())
 }
