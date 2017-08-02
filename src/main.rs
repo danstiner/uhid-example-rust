@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2012-2013 David Herrmann <dh.herrmann@gmail.com>
  *
- * Converted from c to rust by Daniel Stiner <daniel.stiner@gmail.com>
+ * Converted from C to rust by Daniel Stiner <daniel.stiner@gmail.com>
  *
  * The code may be used by anyone for any purpose,
  * and can serve as a starting point for developing
