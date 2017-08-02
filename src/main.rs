@@ -287,10 +287,10 @@ fn send_event(file: &mut File, input: &InputEvent) -> io::Result<()> {
         if input.btn1_down {
             uhid_input.data[1] |= 0x1;
         }
-        if input.btn1_down {
+        if input.btn2_down {
             uhid_input.data[1] |= 0x2;
         }
-        if input.btn1_down {
+        if input.btn3_down {
             uhid_input.data[1] |= 0x4;
         }
         uhid_input.data[2] = input.abs_hor as u8;
