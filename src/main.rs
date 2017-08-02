@@ -275,6 +275,96 @@ fn destroy(file: &mut File) -> io::Result<()>
     uhid_write(file, &ev)
 }
 
+/* This parses raw output reports sent by the kernel to the device. A normal
+ * uhid program shouldn't do this but instead just forward the raw report.
+ * However, for ducomentational purposes, we try to detect LED events here and
+ * print debug messages for it. */
+fn handle_output(ev: &uhid_event) {
+    unsafe {
+        let ev_output = ev.u.output.as_ref();
+
+        /* LED messages are adverised via OUTPUT reports; ignore the rest */
+        if ev_output.rtype != uhid_report_type::UHID_OUTPUT_REPORT as u8 {
+            return;
+        }
+        /* LED reports have length 2 bytes */
+        if ev_output.size != 2 {
+            return;
+        }
+        /* first byte is report-id which is 0x02 for LEDs in our rdesc */
+        if ev_output.data[0] != 0x2 {
+            return;
+        }
+
+        /* print flags payload */
+        eprintln!("LED output report received with flags {:x}", ev_output.data[1]);
+    }
+}
+
+fn handle_event(file: &mut File) -> io::Result<()> {
+    let mut ev: uhid_event = unsafe { mem::zeroed() };
+    let uhid_event_size = mem::size_of::<uhid_event>();
+
+    unsafe {
+        let uhid_event_slice = slice::from_raw_parts_mut(
+            &mut ev as *mut _ as *mut u8,
+            uhid_event_size
+        );
+        file.read_exact(uhid_event_slice).unwrap();
+    }
+
+    match from_u32_to_maybe_uhid_event_type(ev.type_).unwrap() {
+        uhid_event_type::UHID_START => eprintln!("UHID_START from uhid-dev"),
+        uhid_event_type::UHID_STOP => eprintln!("UHID_STOP from uhid-dev"),
+        uhid_event_type::UHID_OPEN => eprintln!("UHID_OPEN from uhid-dev"),
+        uhid_event_type::UHID_CLOSE => eprintln!("UHID_CLOSE from uhid-dev"),
+        uhid_event_type::UHID_OUTPUT => {
+            eprintln!("UHID_OUTPUT from uhid-dev");
+            handle_output(&ev);
+        },
+        uhid_event_type::__UHID_LEGACY_OUTPUT_EV => eprintln!("UHID_OUTPUT_EV from uhid-dev"),
+        _ => eprintln!("Invalid event from uhid-dev: {}", ev.type_),
+    };
+
+    Ok(())
+}
+
+fn from_u32_to_maybe_uhid_event_type(value: u32) -> Option<uhid_event_type> {
+    if value == uhid_event_type::__UHID_LEGACY_CREATE as u32 {
+        Some(uhid_event_type::__UHID_LEGACY_CREATE)
+    } else if value == uhid_event_type::UHID_DESTROY as u32 {
+        Some(uhid_event_type::UHID_DESTROY)
+    } else if value == uhid_event_type::UHID_START as u32 {
+        Some(uhid_event_type::UHID_START)
+    } else if value == uhid_event_type::UHID_STOP as u32 {
+        Some(uhid_event_type::UHID_STOP)
+    } else if value == uhid_event_type::UHID_OPEN as u32 {
+        Some(uhid_event_type::UHID_OPEN)
+    } else if value == uhid_event_type::UHID_CLOSE as u32 {
+        Some(uhid_event_type::UHID_CLOSE)
+    } else if value == uhid_event_type::UHID_OUTPUT as u32 {
+        Some(uhid_event_type::UHID_OUTPUT)
+    } else if value == uhid_event_type::__UHID_LEGACY_OUTPUT_EV as u32 {
+        Some(uhid_event_type::__UHID_LEGACY_OUTPUT_EV)
+    } else if value == uhid_event_type::__UHID_LEGACY_INPUT as u32 {
+        Some(uhid_event_type::__UHID_LEGACY_INPUT)
+    } else if value == uhid_event_type::UHID_GET_REPORT as u32 {
+        Some(uhid_event_type::UHID_GET_REPORT)
+    } else if value == uhid_event_type::UHID_GET_REPORT_REPLY as u32 {
+        Some(uhid_event_type::UHID_GET_REPORT_REPLY)
+    } else if value == uhid_event_type::UHID_CREATE2 as u32 {
+        Some(uhid_event_type::UHID_CREATE2)
+    } else if value == uhid_event_type::UHID_INPUT2 as u32 {
+        Some(uhid_event_type::UHID_INPUT2)
+    } else if value == uhid_event_type::UHID_SET_REPORT as u32 {
+        Some(uhid_event_type::UHID_SET_REPORT)
+    } else if value == uhid_event_type::UHID_SET_REPORT_REPLY as u32 {
+        Some(uhid_event_type::UHID_SET_REPORT_REPLY)
+    } else {
+        None
+    }
+}
+
 fn send_event(file: &mut File, input: &InputEvent) -> io::Result<()> {
     let mut ev: uhid_event = unsafe { mem::zeroed() };
 
@@ -415,17 +505,14 @@ fn main() {
 
         for event in events.iter() {
             match event.token() {
-                STDIN => {
-                    keyboard(&mut file, &mut device_state);
-                }
-                UHID_DEVICE => {
-                    // event()
-                }
+                STDIN => keyboard(&mut file, &mut device_state).unwrap(),
+                UHID_DEVICE => handle_event(&mut file).unwrap(),
                 _ => unreachable!(),
             }
         }
     }
 
+    // TODO: Unreachable, should instead cleanly exit when q is pressed
     println!("Destroy uhid device");
-    destroy(&mut file);
+    destroy(&mut file).unwrap();
 }
