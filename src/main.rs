@@ -481,7 +481,7 @@ fn main() {
     };
 
     eprintln!("Open uhid-cdev {}", path.to_str().unwrap());
-    let fd = fcntl::open(&path, fcntl::O_RDWR | fcntl::O_CLOEXEC, nix::sys::stat::S_IRUSR | nix::sys::stat::S_IWUSR | nix::sys::stat::S_IRGRP | nix::sys::stat::S_IWGRP).map_err(|err| format!("Cannot open uhid-cdev {}: {}", path.to_str().unwrap(), err)).unwrap();
+    let fd = fcntl::open(&path, fcntl::O_RDWR | fcntl::O_CLOEXEC | fcntl::O_NONBLOCK, nix::sys::stat::S_IRUSR | nix::sys::stat::S_IWUSR | nix::sys::stat::S_IRGRP | nix::sys::stat::S_IWGRP).map_err(|err| format!("Cannot open uhid-cdev {}: {}", path.to_str().unwrap(), err)).unwrap();
     let mut file = unsafe { File::from_raw_fd(fd) };
 
     eprintln!("Create uhid device");
